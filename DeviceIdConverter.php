@@ -124,10 +124,6 @@ class DeviceIdConverter {
         $this->results['meid_dec'] =
         $this->transformSerial($this->results['meid_hex'], 16, 10, 8, 10, 8);
 
-        /* Technically, this should be based of the first two digits.
-         * All decimal = base10 Luhn, Hex = base 16 Luhn
-         * See https://www.cdg.org/devices/meid/MEID-EUIMID-FAQv4.0.pdf
-        */
         $this->results['meid_hex_check'] =
         ($this->isImei) ?
         $this->calculateCheckLuhn($this->results['meid_hex'], 10) :
