@@ -32,8 +32,17 @@
         conversion.inputFormat = 'hex';
       }
       else if (this.meidDecPattern.test(deviceId)) {
-        conversion.inputType = 'meid';
-        conversion.inputFormat = 'dec';
+        var result = this.transformSerial(deviceId, 10, 16, 10, 8, 6);
+        // An invalid decimal MEID can return an invalid hex MEID greater than 14 digits,
+        // even though it passes the regex.  Right now, this is the only way I know of to test this.
+        if (result.length < 15) {
+          conversion.inputType = 'meid';
+          conversion.inputFormat = 'dec';
+        }
+        else {
+          conversion.inputType = 'invalid';
+          conversion.inputFormat = 'invalid';
+        }
       }
       else if (this.esnHexPattern.test(deviceId)) {
         conversion.inputType = 'esn';
@@ -87,13 +96,10 @@
             case 'dec':
               conversion.results.meidDec = deviceId;
               var meidHex = this.transformSerial(deviceId, 10, 16, 10, 8, 6);
-
               if (this.imeiPattern.test(meidHex)) {
-                // The input was an IMEI with decimal conversion incorrectly applied.
+                // The input is an IMEI using the "decimal" MEID display format.
                 conversion.results.imei = meidHex;
                 conversion.results.check = this.calculateCheck(meidHex);
-                conversion.inputType = 'imei';
-                conversion.inputFormat = 'invalid';
               }
               else {
                 conversion.results.meidHex = meidHex;
@@ -128,7 +134,7 @@
       var conversion = this.convert(deviceId);
       switch (conversion.inputType) {
         case 'imei':
-          return conversion.results.imei+conversion.results.check;
+          return conversion.results.imei+conversion.results.check+" / "+conversion.results.meidDec;
           break;
         case 'meid':
           return conversion.results.meidHex+" / "+conversion.results.meidDec;
