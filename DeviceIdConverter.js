@@ -14,6 +14,7 @@
         inputType: null,
         inputFormat: null,
         results: {
+          //@todo: how do we know what inputFormat the check is for?
           'check': null,
           'imei': null,
           'meidHex': null,
@@ -74,14 +75,13 @@
       var conversion = this.initialize(deviceId);
       if (conversion.inputType !== 'invalid') {
         switch (conversion.inputType) {
-        case 'imei':
-          // IMEI are always decimal
-          conversion.results.imei = deviceId.substr(0,14);
-          conversion.results.check = deviceId.substr(14);
-          // Accept the check digit the user entered, if present.
-          if (!(conversion.results.check)) {
-            conversion.results.check = this.calculateCheck(deviceId);
-          }
+          case 'imei':
+            conversion.results.imei = deviceId.substr(0,14);
+            conversion.results.check = deviceId.substr(14);
+            // Accept the check digit the user entered, if present.
+            if (!(conversion.results.check)) {
+              conversion.results.check = this.calculateCheck(deviceId);
+            }
           break;
         case 'meid':
           switch (conversion.inputFormat) {
