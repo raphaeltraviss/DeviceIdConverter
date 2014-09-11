@@ -130,6 +130,15 @@ class DeviceIdConverter {
   }
 
   /**
+   * Gets the current input type; used from outside this object.
+   *
+   * @return The stored user input
+   */
+  public function getInputType() {
+    return $this->inputType.'_'.$this->displayFormat;
+  }
+
+  /**
    * Gets the current results; used from outside this object.
    *
    * @return An array of results, keyed by type_format.
