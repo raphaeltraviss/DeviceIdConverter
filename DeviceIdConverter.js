@@ -1,6 +1,7 @@
 (function() {
   // Initialize the deviceIdConverter object available globally.
   window.deviceIdConverter = {
+    iccidPattern: new RegExp('^[0-9]{19,20}$'),
     imeiPattern: new RegExp('^[0-9]{14,15}$'),
     meidHexPattern: new RegExp('^[a-fA-F0-9]{14,15}$'),
     meidDecPattern: new RegExp('^[0-9]{18}$'),
@@ -15,15 +16,21 @@
         inputFormat: null,
         results: {
           // note that decimal IMEI are handled internally as hex MEID.
-          'meidHexCheck': null,
+          'iccidDec': null,
+          'iccidDecCheck': null,
           'meidHex': null,
+          'meidHexCheck': null,
           'meidDec': null,
           'esnHex': null,
           'esnDec': null,
         }
       };
 
-      if (this.imeiPattern.test(deviceId)) {
+      if (this.iccidPattern.test(deviceId)) {
+        conversion.inputType = 'iccid';
+        conversion.inputFormat = 'dec';
+      }
+      else if (this.imeiPattern.test(deviceId)) {
         conversion.inputType = 'imei';
         conversion.inputFormat = 'dec';
       }
@@ -74,51 +81,65 @@
       var conversion = this.initialize(deviceId);
       if (conversion.inputType !== 'invalid') {
         switch (conversion.inputType) {
+          case 'iccid':
+            var iccidDec = deviceId.substr(0,19);
+            conversion.results.iccidDec = iccidDec;
+            // Re-calculate the check digit, even if one was entered.
+            conversion.results.iccidDecCheck = this.calculateCheck(iccidDec);
+            break;
+
           case 'imei':
             var meidHex = deviceId.substr(0,14);
             conversion.results.meidHex = meidHex;
             // Re-calculate the check digit, even if one was entered.
             conversion.results.meidHexCheck = this.calculateCheck(deviceId);
             conversion.results.meidDec = this.transformSerial(meidHex, 16, 10, 8, 10, 8);
-          break;
-        case 'meid':
-          switch (conversion.inputFormat) {
-            case 'hex':
-              var meidHex = deviceId.substr(0,14);
-              conversion.results.meidHex = meidHex;
-              conversion.results.meidDec = this.transformSerial(meidHex, 16, 10, 8, 10, 8);
-              var pseudoEsn = this.calculatePseudoEsn(meidHex);
-              conversion.results.esnHex = pseudoEsn;
-              conversion.results.esnDec = this.transformSerial(pseudoEsn, 16, 10, 2, 3, 8);
-              break;
-            case 'dec':
-              conversion.results.meidDec = deviceId;
-              var meidHex = this.transformSerial(deviceId, 10, 16, 10, 8, 6);
-              conversion.results.meidHex = meidHex;
-              if (this.imeiPattern.test(meidHex)) {
-                // The input is an IMEI using the "decimal" display format.
-                conversion.results.meidHexCheck = this.calculateCheck(meidHex);
-              }
-              else {
+            var pseudoEsn = this.calculatePseudoEsn(meidHex);
+            conversion.results.esnHex = pseudoEsn;
+            conversion.results.esnDec = this.transformSerial(pseudoEsn, 16, 10, 2, 3, 8);
+            break;
+
+          case 'meid':
+            switch (conversion.inputFormat) {
+              case 'hex':
+                var meidHex = deviceId.substr(0,14);
+                conversion.results.meidHex = meidHex;
+                conversion.results.meidDec = this.transformSerial(meidHex, 16, 10, 8, 10, 8);
                 var pseudoEsn = this.calculatePseudoEsn(meidHex);
                 conversion.results.esnHex = pseudoEsn;
                 conversion.results.esnDec = this.transformSerial(pseudoEsn, 16, 10, 2, 3, 8);
-              }
-              break;
-          }
-          break;
-        case 'esn':
-          switch (conversion.inputFormat) {
-            case 'hex':
-              conversion.results.esnHex = deviceId;
-              conversion.results.esnDec = this.transformSerial(deviceId, 16, 10, 2, 3, 8);
-              break;
-            case 'dec':
-              conversion.results.esnDec = deviceId;
-              conversion.results.esnHex = this.transformSerial(deviceId, 10, 16, 3, 2, 6);
-              break;
-          }
-          break;
+                break;
+
+              case 'dec':
+                conversion.results.meidDec = deviceId;
+                var meidHex = this.transformSerial(deviceId, 10, 16, 10, 8, 6);
+                conversion.results.meidHex = meidHex;
+                if (this.imeiPattern.test(meidHex)) {
+                  // The input is an IMEI using the "decimal" display format.
+                  conversion.results.meidHexCheck = this.calculateCheck(meidHex);
+                }
+                else {
+                  var pseudoEsn = this.calculatePseudoEsn(meidHex);
+                  conversion.results.esnHex = pseudoEsn;
+                  conversion.results.esnDec = this.transformSerial(pseudoEsn, 16, 10, 2, 3, 8);
+                }
+                break;
+
+            }
+            break;
+
+          case 'esn':
+            switch (conversion.inputFormat) {
+              case 'hex':
+                conversion.results.esnHex = deviceId;
+                conversion.results.esnDec = this.transformSerial(deviceId, 16, 10, 2, 3, 8);
+                break;
+              case 'dec':
+                conversion.results.esnDec = deviceId;
+                conversion.results.esnHex = this.transformSerial(deviceId, 10, 16, 3, 2, 6);
+                break;
+            }
+            break;
         }
         return conversion;
       }
@@ -130,6 +151,9 @@
     getResult: function(deviceId) {
       var conversion = this.convert(deviceId);
       switch (conversion.inputType) {
+        case 'iccid':
+          return conversion.results.iccidDec+conversion.results.iccidDecCheck;
+          break;
         case 'imei':
           return conversion.results.meidHex+conversion.results.meidHexCheck+" / "+conversion.results.meidDec;
           break;
@@ -145,20 +169,19 @@
     /**
      * calculateCheck
      *
-     * Javascript code copyright 2009 by Fiach Reid : www.webtropy.com
-     * This code may be used freely, as long as this copyright notice is intact.
+     * @param number - a decimal number to calculate the check digit for.
      *
      * @return - The calculated check digit INT
      */
-    calculateCheck: function(Luhn) {
+    calculateCheck: function(number) {
       // Note that this only calculates base-10 check digits.
       var sum = 0;
-      for (i=0; i<Luhn.length; i++ ) {
-        sum += parseInt(Luhn.substring(i, i+1));
+      for (i = 0; i < number.length; i++ ) {
+        sum += parseInt(number.substring(i, i+1));
       }
       var delta = new Array (0, 1, 2, 3, 4, -4, -3, -2, -1, 0);
-      for (i = Luhn.length - 1; i >= 0; i -= 2 ) {
-        var deltaIndex = parseInt(Luhn.substring(i, i+1));
+      for (i = number.length - 1; i >= 0; i -= 2 ) {
+        var deltaIndex = parseInt(number.substring(i, i+1));
         var deltaValue = delta[deltaIndex];
         sum += deltaValue;
       }

@@ -9,6 +9,7 @@
 class DeviceIdConverter {
 
   /* REGEXP EXPRESSIONS FOR INPUT VALIDATION */
+  const VALIDATE_ICCID         = '/^[0-9]{19,20}$/';
   const VALIDATE_IMEI         = '/^[0-9]{14,15}$/';
   const VALIDATE_MEID_HEX     = '/^[a-fA-F0-9]{14,15}$/';
   const VALIDATE_MEID_DEC     = '/^[0-9]{18}$/';
@@ -62,11 +63,18 @@ class DeviceIdConverter {
     // Clear out the prior results if the object is being re-used.
     $this->clearInput();
     $this->input = $input;
-
     // Validate the input and declare type, format, and attributes.
-    if (preg_match(self::VALIDATE_IMEI, $input)) {
+    if (preg_match(self::VALIDATE_ICCID, $input)) {
       // Remove check digit, if preset.
-      // This is different than what we do in the the javascript version.
+      // Assumes 19-digit IMEI with a check digit.
+      $input = substr($input, 0, 19);
+
+      $this->inputType = 'iccid';
+      $this->displayFormat = 'dec';
+      $this->results['iccid_dec'] = $input;
+    }
+    elseif (preg_match(self::VALIDATE_IMEI, $input)) {
+      // Remove check digit, if preset.
       $input = substr($input, 0, 14);
 
       $this->inputType = 'imei';
@@ -74,7 +82,7 @@ class DeviceIdConverter {
       // Internally, IMEI are treated as MEID.
       $this->results['meid_hex'] = $input;
     }
-    else if (preg_match(self::VALIDATE_MEID_HEX, $input)) {
+    elseif (preg_match(self::VALIDATE_MEID_HEX, $input)) {
       // Remove check digit, if preset.
       $input = substr($input, 0, 14);
 
@@ -82,7 +90,7 @@ class DeviceIdConverter {
       $this->displayFormat = 'hex';
       $this->results['meid_hex'] = $input;
     }
-    else if (preg_match(self::VALIDATE_MEID_DEC, $input)) {
+    elseif (preg_match(self::VALIDATE_MEID_DEC, $input)) {
       $hex_id = $this->transformSerial($input, 10, 16, 10, 8, 6);
 
       // Check for mathematically invalid decimal number given.
@@ -104,17 +112,19 @@ class DeviceIdConverter {
         return FALSE;
       }
     }
-    else if (preg_match(self::VALIDATE_ESN_HEX, $input)) {
+    elseif (preg_match(self::VALIDATE_ESN_HEX, $input)) {
       $this->inputType = 'esn';
       $this->displayFormat = 'hex';
       $this->results['esn_hex'] = $input;
     }
-    else if (preg_match(self::VALIDATE_ESN_DEC, $input)) {
+    elseif (preg_match(self::VALIDATE_ESN_DEC, $input)) {
       $this->inputType = 'esn';
       $this->displayFormat = 'dec';
       $this->results['esn_dec'] = $input;
     }
     else {
+      $this->inputType = FALSE;
+      $this->displayFormat = FALSE;
       return FALSE;
     }
     return $this;
@@ -158,27 +168,35 @@ class DeviceIdConverter {
       $this->validateInput($input);
     }
 
-    if (($this->inputType == 'imei') || ($this->inputType == 'meid')) {
-      if ($this->displayFormat == 'hex') {
-        $this->results['meid_dec'] = $this->transformSerial($this->results['meid_hex'], 16, 10, 8, 10, 8);
+    if ($this->inputType) {
+      if ($this->inputType == 'iccid') {
+        $this->results['iccid_dec_check'] = $this->calculateCheckLuhn($this->results['iccid_dec'], 10);
       }
-      else if ($this->displayFormat == 'dec') {
-        $this->results['meid_hex'] = $this->transformSerial($this->results['meid_dec'], 10, 16, 10, 8, 6);
+      elseif (($this->inputType == 'imei') || ($this->inputType == 'meid')) {
+        if ($this->displayFormat == 'hex') {
+          $this->results['meid_dec'] = $this->transformSerial($this->results['meid_hex'], 16, 10, 8, 10, 8);
+        }
+        else if ($this->displayFormat == 'dec') {
+          $this->results['meid_hex'] = $this->transformSerial($this->results['meid_dec'], 10, 16, 10, 8, 6);
+        }
+        $this->results['meid_hex_check'] = $this->calculateCheckLuhn($this->results['meid_hex'], 16);
+        $this->results['meid_dec_check'] = $this->calculateCheckLuhn($this->results['meid_dec'], 10);
+        $this->results['esn_hex'] = $this->calculatePesn($this->results['meid_hex']);
+        $this->results['esn_dec'] =$this->transformSerial($this->results['esn_hex'], 16, 10, 2, 3, 8);
       }
-      $this->results['meid_hex_check'] = $this->calculateCheckLuhn($this->results['meid_hex'], 16);
-      $this->results['meid_dec_check'] = $this->calculateCheckLuhn($this->results['meid_dec'], 10);
-      $this->results['esn_hex'] = $this->calculatePesn($this->results['meid_hex']);
-      $this->results['esn_dec'] =$this->transformSerial($this->results['esn_hex'], 16, 10, 2, 3, 8);
+      elseif ($this->inputType == 'esn') {
+        if ($this->displayFormat == 'hex') {
+          $this->results['esn_dec'] = $this->transformSerial($this->results['esn_hex'], 16, 10, 2, 3, 8);
+        }
+        else if ($this->displayFormat == 'dec') {
+          $this->results['esn_hex'] = $this->transformSerial($this->results['esn_dec'], 10, 16, 3, 2, 6);
+        }
+      }
+      return $this;
     }
-    else if ($this->inputType == 'esn') {
-      if ($this->displayFormat == 'hex') {
-        $this->results['esn_dec'] = $this->transformSerial($this->results['esn_hex'], 16, 10, 2, 3, 8);
-      }
-      else if ($this->displayFormat == 'dec') {
-        $this->results['esn_hex'] = $this->transformSerial($this->results['esn_dec'], 10, 16, 3, 2, 6);
-      }
+    else {
+      return FALSE;
     }
-    return $this;
   }
 
   /**
@@ -197,14 +215,16 @@ class DeviceIdConverter {
   }
 
   /**
-   * calculateCheck
+   * @var string $input
+   *  The device ID you wish to calculate the Luhn check digit for.  Make sure
+   *  you feed it the input ID with the check removed, if one was already entered.
    *
    * @return - The calculated check digit INT
    */
   protected function calculateCheckLuhn($input, $base) {
     $checkstring = '';
     $digits = str_split((string) $input);
-    $digits[14] = 0;
+    $digits[] = 0;
     $digits = array_reverse($digits);
 
     $digit_sum = function($checkstring) {
@@ -218,6 +238,7 @@ class DeviceIdConverter {
         }
         return $digit_sum($checkstring);
         break;
+
       case 16:
         foreach ($digits as $i => $d) {
           // Convert to dec so PHP can do math.
@@ -226,6 +247,7 @@ class DeviceIdConverter {
         }
         return dechex($digit_sum($checkstring));
         break;
+
     }
   }
 
